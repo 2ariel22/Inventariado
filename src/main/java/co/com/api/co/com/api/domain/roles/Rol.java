@@ -2,6 +2,7 @@ package co.com.api.co.com.api.domain.roles;
 
 import jakarta.persistence.*;
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "roles")
@@ -17,9 +18,10 @@ public class Rol {
     private String descripcion;
     
     @ManyToMany(mappedBy = "roles")
+    @JsonIgnore
     private List<co.com.api.co.com.api.domain.usuarios.Usuario> usuarios;
     
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "rol_permisos",
         joinColumns = @JoinColumn(name = "rol_id"),

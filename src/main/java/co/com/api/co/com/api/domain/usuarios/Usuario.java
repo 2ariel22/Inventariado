@@ -2,11 +2,18 @@ package co.com.api.co.com.api.domain.usuarios;
 
 import co.com.api.co.com.api.domain.roles.Rol;
 import jakarta.persistence.*;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "usuarios")
-public class Usuario {
+public class Usuario implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -15,6 +22,7 @@ public class Usuario {
     private String user;
     
     @Column(nullable = false)
+    @JsonIgnore
     private String password;
     
     @Column(nullable = false)
@@ -26,7 +34,7 @@ public class Usuario {
     @Column
     private String apellido;
     
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "usuario_roles",
         joinColumns = @JoinColumn(name = "usuario_id"),
@@ -111,5 +119,48 @@ public class Usuario {
     
     public void setActivo(Boolean activo) {
         this.activo = activo;
+    }
+
+    // Implementación de UserDetails
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        if (roles == null || roles.isEmpty()) {
+            return List.of();
+        }
+        
+        return roles.stream()
+                .flatMap(rol -> {
+                    if (rol.getPermisos() != null) {
+                        return rol.getPermisos().stream()
+                                .map(permiso -> new SimpleGrantedAuthority(permiso.getNombre()));
+                    }
+                    return List.<SimpleGrantedAuthority>of().stream();
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public String getUsername() {
+        return user;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return activo != null && activo;
     }
 }

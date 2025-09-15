@@ -2,17 +2,19 @@ package co.com.api.co.com.api.controller;
 
 import co.com.api.co.com.api.domain.ventas.Venta;
 import co.com.api.co.com.api.domain.ventas.VentaRepository;
-import co.com.api.co.com.api.domain.ventas.DetalleVenta;
 import co.com.api.co.com.api.domain.clientes.Cliente;
 import co.com.api.co.com.api.domain.clientes.ClienteRepository;
 import co.com.api.co.com.api.domain.empleados.Empleado;
 import co.com.api.co.com.api.domain.empleados.EmpleadoRepository;
 import co.com.api.co.com.api.domain.productos.Producto;
 import co.com.api.co.com.api.domain.productos.ProductoRepository;
+import co.com.api.co.com.api.dto.CreateVentaRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -22,6 +24,8 @@ import java.util.Optional;
 @RequestMapping("/api/ventas")
 @CrossOrigin(origins = "*")
 public class VentaController {
+
+    private static final Logger logger = LoggerFactory.getLogger(VentaController.class);
 
     @Autowired
     private VentaRepository ventaRepository;
@@ -119,39 +123,86 @@ public class VentaController {
 
     // POST - Crear nueva venta
     @PostMapping
-    public ResponseEntity<Venta> createVenta(@RequestBody Venta venta) {
+    public ResponseEntity<Venta> createVenta(@RequestBody CreateVentaRequest request) {
+        logger.info("Intentando crear venta para cliente ID: {} y vendedor ID: {}", request.clienteId(), request.vendedorId());
         try {
+            // Validar datos de entrada
+            if (request.clienteId() == null) {
+                logger.warn("ID de cliente es obligatorio");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (request.vendedorId() == null) {
+                logger.warn("ID de vendedor es obligatorio");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (request.valorVenta() == null || request.valorVenta().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                logger.warn("Valor de venta inválido: {}", request.valorVenta());
+                return ResponseEntity.badRequest().build();
+            }
+
             // Verificar que el cliente existe
-            if (venta.getCliente() != null && venta.getCliente().getId() != null) {
-                Optional<Cliente> cliente = clienteRepository.findById(venta.getCliente().getId());
-                if (cliente.isEmpty()) {
-                    return ResponseEntity.badRequest().build();
-                }
-                venta.setCliente(cliente.get());
+            Optional<Cliente> cliente = clienteRepository.findById(request.clienteId());
+            if (cliente.isEmpty()) {
+                logger.warn("Cliente no encontrado con ID: {}", request.clienteId());
+                return ResponseEntity.badRequest().build();
             }
 
             // Verificar que el vendedor existe
-            if (venta.getVendedor() != null && venta.getVendedor().getId() != null) {
-                Optional<Empleado> vendedor = empleadoRepository.findById(venta.getVendedor().getId());
-                if (vendedor.isEmpty()) {
-                    return ResponseEntity.badRequest().build();
-                }
-                venta.setVendedor(vendedor.get());
+            Optional<Empleado> vendedor = empleadoRepository.findById(request.vendedorId());
+            if (vendedor.isEmpty()) {
+                logger.warn("Vendedor no encontrado con ID: {}", request.vendedorId());
+                return ResponseEntity.badRequest().build();
             }
 
-            // Establecer fecha actual si no se proporciona
-            if (venta.getFecha() == null) {
+            // Crear nueva venta
+            Venta venta = new Venta();
+            venta.setCliente(cliente.get());
+            venta.setVendedor(vendedor.get());
+            venta.setValorVenta(request.valorVenta());
+            venta.setDescripcion(request.descripcion());
+
+            // Establecer fecha
+            if (request.fecha() != null) {
+                venta.setFecha(request.fecha());
+            } else {
                 venta.setFecha(LocalDate.now());
             }
 
-            // Establecer estado por defecto
-            if (venta.getEstado() == null) {
+            // Establecer estado
+            if (request.estado() != null) {
+                try {
+                    venta.setEstado(Venta.EstadoVenta.valueOf(request.estado().toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    logger.warn("Estado de venta inválido: {}", request.estado());
+                    return ResponseEntity.badRequest().build();
+                }
+            } else {
                 venta.setEstado(Venta.EstadoVenta.PENDIENTE);
             }
 
+            // Agregar productos si se proporcionan
+            if (request.productoIds() != null && !request.productoIds().isEmpty()) {
+                List<Producto> productos = productoRepository.findAllById(request.productoIds());
+                if (productos.size() != request.productoIds().size()) {
+                    logger.warn("Algunos productos no existen. IDs proporcionados: {}, productos encontrados: {}", 
+                               request.productoIds(), productos.stream().map(Producto::getId).toList());
+                    return ResponseEntity.badRequest().build();
+                }
+                venta.setProductos(productos);
+            }
+
             Venta nuevaVenta = ventaRepository.save(venta);
+            logger.info("Venta creada exitosamente: ID {}, Cliente: {}, Vendedor: {}, Valor: {}", 
+                       nuevaVenta.getId(), nuevaVenta.getCliente().getId(), 
+                       nuevaVenta.getVendedor().getId(), nuevaVenta.getValorVenta());
+            
             return ResponseEntity.status(HttpStatus.CREATED).body(nuevaVenta);
         } catch (Exception e) {
+            logger.error("Error al crear venta para cliente ID: {} y vendedor ID: {}", 
+                        request.clienteId(), request.vendedorId(), e);
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

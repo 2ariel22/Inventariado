@@ -14,6 +14,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
@@ -23,18 +27,14 @@ public class SecurityConfigurations {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception{
-        return httpSecurity.csrf().disable().sessionManagement()
+        return httpSecurity.csrf().disable()
+                .cors().configurationSource(corsConfigurationSource())
+                .and().sessionManagement()
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 .and().authorizeHttpRequests()
-                .requestMatchers(HttpMethod.POST, "/api/auth/**")
+                .requestMatchers("/api/auth/**")
                 .permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/auth/debug")
-                .permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/init/**")
-                .permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/init/status")
-                .permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/init/reset-admin")
+                .requestMatchers("/api/init/**")
                 .permitAll()
                 .requestMatchers("/swagger-ui.html", "/v3/api-docs/**","/swagger-ui/**", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**")
                 .permitAll()
@@ -51,5 +51,18 @@ public class SecurityConfigurations {
     @Bean
     public PasswordEncoder bCryptPasswordEncoder(){
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }

@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -15,6 +17,8 @@ import java.util.Optional;
 @RequestMapping("/api/contabilidad")
 @CrossOrigin(origins = "*")
 public class ContabilidadController {
+
+    private static final Logger logger = LoggerFactory.getLogger(ContabilidadController.class);
 
     @Autowired
     private ContabilidadRepository contabilidadRepository;
@@ -72,10 +76,55 @@ public class ContabilidadController {
     // POST - Crear nuevo registro contable
     @PostMapping
     public ResponseEntity<Contabilidad> createContabilidad(@RequestBody Contabilidad contabilidad) {
+        logger.info("Intentando crear registro contable");
         try {
+            // Validar datos de entrada
+            if (contabilidad.getTipoMovimiento() == null) {
+                logger.warn("Tipo de movimiento es obligatorio");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (contabilidad.getFecha() == null) {
+                logger.warn("Fecha es obligatoria");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (contabilidad.getGastos() == null && contabilidad.getIngresos() == null) {
+                logger.warn("Debe proporcionar al menos un monto (gastos o ingresos)");
+                return ResponseEntity.badRequest().build();
+            }
+
+            // Validar montos
+            if (contabilidad.getGastos() != null && contabilidad.getGastos().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                logger.warn("Los gastos no pueden ser negativos: {}", contabilidad.getGastos());
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (contabilidad.getIngresos() != null && contabilidad.getIngresos().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                logger.warn("Los ingresos no pueden ser negativos: {}", contabilidad.getIngresos());
+                return ResponseEntity.badRequest().build();
+            }
+
+            // Establecer valores por defecto si no se proporcionan
+            if (contabilidad.getGastos() == null) {
+                contabilidad.setGastos(java.math.BigDecimal.ZERO);
+            }
+            if (contabilidad.getIngresos() == null) {
+                contabilidad.setIngresos(java.math.BigDecimal.ZERO);
+            }
+
+            // Limpiar descripción si se proporciona
+            if (contabilidad.getDescripcion() != null) {
+                contabilidad.setDescripcion(contabilidad.getDescripcion().trim());
+            }
+
             Contabilidad nuevoRegistro = contabilidadRepository.save(contabilidad);
+            logger.info("Registro contable creado exitosamente: ID {}, Tipo: {}, Fecha: {}", 
+                       nuevoRegistro.getId(), nuevoRegistro.getTipoMovimiento(), nuevoRegistro.getFecha());
             return ResponseEntity.status(HttpStatus.CREATED).body(nuevoRegistro);
         } catch (Exception e) {
+            logger.error("Error al crear registro contable", e);
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -83,12 +132,35 @@ public class ContabilidadController {
     // POST - Crear registro de gasto
     @PostMapping("/gasto")
     public ResponseEntity<Contabilidad> createGasto(@RequestBody Contabilidad contabilidad) {
+        logger.info("Intentando crear registro de gasto");
         try {
+            // Validar datos de entrada
+            if (contabilidad.getGastos() == null || contabilidad.getGastos().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                logger.warn("Monto de gasto inválido: {}", contabilidad.getGastos());
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (contabilidad.getFecha() == null) {
+                logger.warn("Fecha es obligatoria para el gasto");
+                return ResponseEntity.badRequest().build();
+            }
+
+            // Configurar como gasto
             contabilidad.setTipoMovimiento(Contabilidad.TipoMovimiento.GASTO);
             contabilidad.setIngresos(java.math.BigDecimal.ZERO);
+
+            // Limpiar descripción si se proporciona
+            if (contabilidad.getDescripcion() != null) {
+                contabilidad.setDescripcion(contabilidad.getDescripcion().trim());
+            }
+
             Contabilidad nuevoGasto = contabilidadRepository.save(contabilidad);
+            logger.info("Gasto creado exitosamente: ID {}, Monto: {}, Fecha: {}", 
+                       nuevoGasto.getId(), nuevoGasto.getGastos(), nuevoGasto.getFecha());
             return ResponseEntity.status(HttpStatus.CREATED).body(nuevoGasto);
         } catch (Exception e) {
+            logger.error("Error al crear gasto", e);
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -96,12 +168,35 @@ public class ContabilidadController {
     // POST - Crear registro de ingreso
     @PostMapping("/ingreso")
     public ResponseEntity<Contabilidad> createIngreso(@RequestBody Contabilidad contabilidad) {
+        logger.info("Intentando crear registro de ingreso");
         try {
+            // Validar datos de entrada
+            if (contabilidad.getIngresos() == null || contabilidad.getIngresos().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                logger.warn("Monto de ingreso inválido: {}", contabilidad.getIngresos());
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (contabilidad.getFecha() == null) {
+                logger.warn("Fecha es obligatoria para el ingreso");
+                return ResponseEntity.badRequest().build();
+            }
+
+            // Configurar como ingreso
             contabilidad.setTipoMovimiento(Contabilidad.TipoMovimiento.INGRESO);
             contabilidad.setGastos(java.math.BigDecimal.ZERO);
+
+            // Limpiar descripción si se proporciona
+            if (contabilidad.getDescripcion() != null) {
+                contabilidad.setDescripcion(contabilidad.getDescripcion().trim());
+            }
+
             Contabilidad nuevoIngreso = contabilidadRepository.save(contabilidad);
+            logger.info("Ingreso creado exitosamente: ID {}, Monto: {}, Fecha: {}", 
+                       nuevoIngreso.getId(), nuevoIngreso.getIngresos(), nuevoIngreso.getFecha());
             return ResponseEntity.status(HttpStatus.CREATED).body(nuevoIngreso);
         } catch (Exception e) {
+            logger.error("Error al crear ingreso", e);
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

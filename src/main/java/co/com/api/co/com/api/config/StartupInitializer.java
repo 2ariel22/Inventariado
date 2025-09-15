@@ -31,8 +31,6 @@ public class StartupInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        System.out.println("=== INICIALIZACIÓN AUTOMÁTICA DEL SISTEMA ===");
-        
         try {
             // Inicializar permisos
             initializePermisos();
@@ -43,10 +41,6 @@ public class StartupInitializer implements CommandLineRunner {
             // Crear usuario admin
             createAdminUser();
             
-            System.out.println("=== SISTEMA INICIALIZADO CORRECTAMENTE ===");
-            System.out.println("Usuario admin disponible: admin / admin123");
-            System.out.println("Swagger UI: http://localhost:8080/swagger-ui.html");
-            
         } catch (Exception e) {
             System.err.println("Error durante la inicialización: " + e.getMessage());
             e.printStackTrace();
@@ -55,11 +49,8 @@ public class StartupInitializer implements CommandLineRunner {
 
     private void initializePermisos() {
         if (permisoRepository.count() > 0) {
-            System.out.println("Permisos ya inicializados (" + permisoRepository.count() + " permisos)");
             return;
         }
-
-        System.out.println("Inicializando permisos...");
         
         List<Permiso> permisos = List.of(
             // Permisos de Productos
@@ -127,16 +118,12 @@ public class StartupInitializer implements CommandLineRunner {
         );
 
         permisoRepository.saveAll(permisos);
-        System.out.println("Permisos inicializados: " + permisos.size() + " permisos creados");
     }
 
     private void initializeRoles() {
         if (rolRepository.count() > 0) {
-            System.out.println("Roles ya inicializados (" + rolRepository.count() + " roles)");
             return;
         }
-
-        System.out.println("Inicializando roles...");
         
         // Obtener todos los permisos
         List<Permiso> todosLosPermisos = permisoRepository.findAll();
@@ -174,22 +161,9 @@ public class StartupInitializer implements CommandLineRunner {
             .toList());
 
         rolRepository.saveAll(List.of(adminRol, vendedorRol, contadorRol, gerenteRol));
-        System.out.println("Roles inicializados: 4 roles creados");
     }
 
     private void createAdminUser() {
-        // Verificar si ya existe un admin
-        List<Usuario> usuarios = usuarioRepository.findAll();
-        boolean adminExiste = usuarios.stream()
-            .anyMatch(u -> u.getUser().equals("admin"));
-        
-        if (adminExiste) {
-            System.out.println("Usuario administrador ya existe");
-            return;
-        }
-
-        System.out.println("Creando usuario administrador...");
-        
         // Obtener rol de administrador
         Optional<Rol> adminRolOpt = rolRepository.findByNombre("ADMIN");
         if (adminRolOpt.isEmpty()) {
@@ -197,17 +171,32 @@ public class StartupInitializer implements CommandLineRunner {
             return;
         }
 
-        // Crear usuario administrador
-        Usuario admin = new Usuario();
-        admin.setUser("admin");
-        admin.setPassword(passwordEncoder.encode("admin123"));
-        admin.setEmail("admin@inventariado.com");
-        admin.setNombre("Administrador");
-        admin.setApellido("Sistema");
-        admin.setActivo(true);
-        admin.setRoles(List.of(adminRolOpt.get()));
-
-        usuarioRepository.save(admin);
-        System.out.println("Usuario administrador creado: admin / admin123");
+        // Buscar usuario admin existente
+        Optional<Usuario> adminExistente = usuarioRepository.findByUser("admin");
+        
+        if (adminExistente.isPresent()) {
+            // Actualizar contraseña del admin existente para asegurar que sea correcta
+            Usuario admin = adminExistente.get();
+            admin.setPassword(passwordEncoder.encode("admin123"));
+            admin.setEmail("admin@inventariado.com");
+            admin.setNombre("Administrador");
+            admin.setApellido("Sistema");
+            admin.setActivo(true);
+            admin.setRoles(List.of(adminRolOpt.get()));
+            usuarioRepository.save(admin);
+            System.out.println("Usuario admin actualizado con contraseña correcta");
+        } else {
+            // Crear nuevo usuario administrador
+            Usuario admin = new Usuario();
+            admin.setUser("admin");
+            admin.setPassword(passwordEncoder.encode("admin123"));
+            admin.setEmail("admin@inventariado.com");
+            admin.setNombre("Administrador");
+            admin.setApellido("Sistema");
+            admin.setActivo(true);
+            admin.setRoles(List.of(adminRolOpt.get()));
+            usuarioRepository.save(admin);
+            System.out.println("Usuario admin creado exitosamente");
+        }
     }
 }

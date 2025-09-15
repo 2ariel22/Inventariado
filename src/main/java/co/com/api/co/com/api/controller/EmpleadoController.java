@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,6 +16,8 @@ import java.util.Optional;
 @RequestMapping("/api/empleados")
 @CrossOrigin(origins = "*")
 public class EmpleadoController {
+
+    private static final Logger logger = LoggerFactory.getLogger(EmpleadoController.class);
 
     @Autowired
     private EmpleadoRepository empleadoRepository;
@@ -68,22 +72,65 @@ public class EmpleadoController {
     // POST - Crear nuevo empleado
     @PostMapping
     public ResponseEntity<Empleado> createEmpleado(@RequestBody Empleado empleado) {
+        logger.info("Intentando crear empleado: {}", empleado.getNombre());
         try {
+            // Validar datos de entrada
+            if (empleado.getNombre() == null || empleado.getNombre().trim().isEmpty()) {
+                logger.warn("Nombre de empleado vacío");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (empleado.getCedula() == null || empleado.getCedula().trim().isEmpty()) {
+                logger.warn("Cédula de empleado vacía");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (empleado.getEdad() == null || empleado.getEdad() <= 0) {
+                logger.warn("Edad de empleado inválida: {}", empleado.getEdad());
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (empleado.getTelefono() == null || empleado.getTelefono().trim().isEmpty()) {
+                logger.warn("Teléfono de empleado vacío");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (empleado.getCorreo() == null || empleado.getCorreo().trim().isEmpty()) {
+                logger.warn("Correo de empleado vacío");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (empleado.getAntiguedad() == null) {
+                logger.warn("Fecha de antigüedad de empleado vacía");
+                return ResponseEntity.badRequest().build();
+            }
+
             // Verificar si ya existe un empleado con la misma cédula
-            Optional<Empleado> empleadoExistente = empleadoRepository.findByCedula(empleado.getCedula());
+            Optional<Empleado> empleadoExistente = empleadoRepository.findByCedula(empleado.getCedula().trim());
             if (empleadoExistente.isPresent()) {
+                logger.warn("Ya existe un empleado con la cédula: {}", empleado.getCedula());
                 return ResponseEntity.status(HttpStatus.CONFLICT).build();
             }
 
             // Verificar si ya existe un empleado con el mismo correo
-            Optional<Empleado> empleadoConCorreo = empleadoRepository.findByCorreo(empleado.getCorreo());
+            Optional<Empleado> empleadoConCorreo = empleadoRepository.findByCorreo(empleado.getCorreo().trim());
             if (empleadoConCorreo.isPresent()) {
+                logger.warn("Ya existe un empleado con el correo: {}", empleado.getCorreo());
                 return ResponseEntity.status(HttpStatus.CONFLICT).build();
             }
 
+            // Limpiar y preparar datos
+            empleado.setNombre(empleado.getNombre().trim());
+            empleado.setCedula(empleado.getCedula().trim());
+            empleado.setTelefono(empleado.getTelefono().trim());
+            empleado.setCorreo(empleado.getCorreo().trim());
+
             Empleado nuevoEmpleado = empleadoRepository.save(empleado);
+            logger.info("Empleado creado exitosamente: {} (ID: {})", nuevoEmpleado.getNombre(), nuevoEmpleado.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(nuevoEmpleado);
         } catch (Exception e) {
+            logger.error("Error al crear empleado: {}", empleado.getNombre(), e);
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

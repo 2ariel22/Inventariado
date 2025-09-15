@@ -2,6 +2,7 @@ package co.com.api.co.com.api.domain.inventario;
 
 import co.com.api.co.com.api.domain.productos.Producto;
 import co.com.api.co.com.api.domain.empleados.Empleado;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;

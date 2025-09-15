@@ -2,15 +2,14 @@ package co.com.api.co.com.api.controller;
 
 import co.com.api.co.com.api.domain.productos.Producto;
 import co.com.api.co.com.api.domain.productos.ProductoRepository;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +20,8 @@ import java.util.Optional;
 @Tag(name = "Productos", description = "Gestión de productos del inventario")
 @SecurityRequirement(name = "bearerAuth")
 public class ProductoController {
+
+    private static final Logger logger = LoggerFactory.getLogger(ProductoController.class);
 
     @Autowired
     private ProductoRepository productoRepository;
@@ -84,16 +85,46 @@ public class ProductoController {
     // POST - Crear nuevo producto
     @PostMapping
     public ResponseEntity<Producto> createProducto(@RequestBody Producto producto) {
+        logger.info("Intentando crear producto: {}", producto.getNombre());
         try {
+            // Validar datos de entrada
+            if (producto.getNombre() == null || producto.getNombre().trim().isEmpty()) {
+                logger.warn("Nombre de producto vacío");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (producto.getCategoria() == null || producto.getCategoria().trim().isEmpty()) {
+                logger.warn("Categoría de producto vacía");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (producto.getStock() == null || producto.getStock() < 0) {
+                logger.warn("Stock de producto inválido: {}", producto.getStock());
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (producto.getPrecio() == null || producto.getPrecio().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                logger.warn("Precio de producto inválido: {}", producto.getPrecio());
+                return ResponseEntity.badRequest().build();
+            }
+
             // Verificar si ya existe un producto con el mismo nombre
-            Optional<Producto> productoExistente = productoRepository.findByNombre(producto.getNombre());
+            Optional<Producto> productoExistente = productoRepository.findByNombre(producto.getNombre().trim());
             if (productoExistente.isPresent()) {
+                logger.warn("Ya existe un producto con el nombre: {}", producto.getNombre());
                 return ResponseEntity.status(HttpStatus.CONFLICT).build();
             }
 
+            // Limpiar y preparar datos
+            producto.setNombre(producto.getNombre().trim());
+            producto.setCategoria(producto.getCategoria().trim());
+
             Producto nuevoProducto = productoRepository.save(producto);
+            logger.info("Producto creado exitosamente: {} (ID: {})", nuevoProducto.getNombre(), nuevoProducto.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(nuevoProducto);
         } catch (Exception e) {
+            logger.error("Error al crear producto: {}", producto.getNombre(), e);
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

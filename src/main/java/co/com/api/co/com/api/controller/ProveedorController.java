@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,6 +16,8 @@ import java.util.Optional;
 @RequestMapping("/api/proveedores")
 @CrossOrigin(origins = "*")
 public class ProveedorController {
+
+    private static final Logger logger = LoggerFactory.getLogger(ProveedorController.class);
 
     @Autowired
     private ProveedorRepository proveedorRepository;
@@ -68,26 +72,61 @@ public class ProveedorController {
     // POST - Crear nuevo proveedor
     @PostMapping
     public ResponseEntity<Proveedor> createProveedor(@RequestBody Proveedor proveedor) {
+        logger.info("Intentando crear proveedor: {}", proveedor.getNombre());
         try {
+            // Validar datos de entrada
+            if (proveedor.getNombre() == null || proveedor.getNombre().trim().isEmpty()) {
+                logger.warn("Nombre de proveedor vacío");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (proveedor.getUbicacion() == null || proveedor.getUbicacion().trim().isEmpty()) {
+                logger.warn("Ubicación de proveedor vacía");
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (proveedor.getAntiguedad() == null) {
+                logger.warn("Fecha de antigüedad de proveedor vacía");
+                return ResponseEntity.badRequest().build();
+            }
+
             // Verificar si ya existe un proveedor con el mismo NIT
-            if (proveedor.getNit() != null) {
-                Optional<Proveedor> proveedorExistente = proveedorRepository.findByNit(proveedor.getNit());
+            if (proveedor.getNit() != null && !proveedor.getNit().trim().isEmpty()) {
+                Optional<Proveedor> proveedorExistente = proveedorRepository.findByNit(proveedor.getNit().trim());
                 if (proveedorExistente.isPresent()) {
+                    logger.warn("Ya existe un proveedor con el NIT: {}", proveedor.getNit());
                     return ResponseEntity.status(HttpStatus.CONFLICT).build();
                 }
             }
 
             // Verificar si ya existe un proveedor con el mismo correo
-            if (proveedor.getCorreo() != null) {
-                Optional<Proveedor> proveedorConCorreo = proveedorRepository.findByCorreo(proveedor.getCorreo());
+            if (proveedor.getCorreo() != null && !proveedor.getCorreo().trim().isEmpty()) {
+                Optional<Proveedor> proveedorConCorreo = proveedorRepository.findByCorreo(proveedor.getCorreo().trim());
                 if (proveedorConCorreo.isPresent()) {
+                    logger.warn("Ya existe un proveedor con el correo: {}", proveedor.getCorreo());
                     return ResponseEntity.status(HttpStatus.CONFLICT).build();
                 }
             }
 
+            // Limpiar y preparar datos
+            proveedor.setNombre(proveedor.getNombre().trim());
+            proveedor.setUbicacion(proveedor.getUbicacion().trim());
+            if (proveedor.getNit() != null) {
+                proveedor.setNit(proveedor.getNit().trim());
+            }
+            if (proveedor.getTelefono() != null) {
+                proveedor.setTelefono(proveedor.getTelefono().trim());
+            }
+            if (proveedor.getCorreo() != null) {
+                proveedor.setCorreo(proveedor.getCorreo().trim());
+            }
+
             Proveedor nuevoProveedor = proveedorRepository.save(proveedor);
+            logger.info("Proveedor creado exitosamente: {} (ID: {})", nuevoProveedor.getNombre(), nuevoProveedor.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(nuevoProveedor);
         } catch (Exception e) {
+            logger.error("Error al crear proveedor: {}", proveedor.getNombre(), e);
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

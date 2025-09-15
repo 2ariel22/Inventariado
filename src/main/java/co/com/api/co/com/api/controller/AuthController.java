@@ -22,6 +22,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +33,8 @@ import java.util.Optional;
 @CrossOrigin(origins = "*")
 @Tag(name = "Autenticación", description = "Endpoints para registro, login y gestión de autenticación")
 public class AuthController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
 
     @Autowired
     private UsuarioReposotiry usuarioRepository;
@@ -56,34 +60,55 @@ public class AuthController {
     })
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest request) {
+        logger.info("Intentando registrar usuario: {}", request.user());
         try {
+            // Validar datos de entrada
+            if (request.user() == null || request.user().trim().isEmpty()) {
+                logger.warn("Intento de registro con usuario vacío");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+            }
+            if (request.password() == null || request.password().trim().isEmpty()) {
+                logger.warn("Intento de registro con contraseña vacía para usuario: {}", request.user());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+            }
+            if (request.email() == null || request.email().trim().isEmpty()) {
+                logger.warn("Intento de registro con email vacío para usuario: {}", request.user());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+            }
+
             // Verificar si ya existe un usuario con el mismo nombre de usuario
-            List<Usuario> usuarios = usuarioRepository.findAll();
-            boolean usuarioExiste = usuarios.stream()
-                    .anyMatch(u -> u.getUser().equals(request.user()));
-            if (usuarioExiste) {
+            Optional<Usuario> usuarioExistente = usuarioRepository.findByUser(request.user());
+            if (usuarioExistente.isPresent()) {
+                logger.warn("Usuario ya existe: {}", request.user());
                 return ResponseEntity.status(HttpStatus.CONFLICT).build();
             }
 
             // Verificar si ya existe un usuario con el mismo email
             Optional<Usuario> usuarioConEmail = usuarioRepository.findByEmail(request.email());
             if (usuarioConEmail.isPresent()) {
+                logger.warn("Email ya existe: {}", request.email());
                 return ResponseEntity.status(HttpStatus.CONFLICT).build();
             }
 
             // Crear nuevo usuario
             Usuario nuevoUsuario = new Usuario();
-            nuevoUsuario.setUser(request.user());
+            nuevoUsuario.setUser(request.user().trim());
             nuevoUsuario.setPassword(passwordEncoder.encode(request.password()));
-            nuevoUsuario.setEmail(request.email());
-            nuevoUsuario.setNombre(request.nombre());
-            nuevoUsuario.setApellido(request.apellido());
+            nuevoUsuario.setEmail(request.email().trim());
+            nuevoUsuario.setNombre(request.nombre() != null ? request.nombre().trim() : null);
+            nuevoUsuario.setApellido(request.apellido() != null ? request.apellido().trim() : null);
             nuevoUsuario.setActivo(true);
 
-            // Asignar roles si se proporcionan
+            // Asignar roles si se proporcionan, sino asignar rol VENDEDOR por defecto
             if (request.rolIds() != null && !request.rolIds().isEmpty()) {
                 List<Rol> roles = rolRepository.findAllById(request.rolIds());
                 nuevoUsuario.setRoles(roles);
+            } else {
+                // Asignar rol VENDEDOR por defecto (ID = 2)
+                Optional<Rol> rolVendedor = rolRepository.findById(2L);
+                if (rolVendedor.isPresent()) {
+                    nuevoUsuario.setRoles(List.of(rolVendedor.get()));
+                }
             }
 
             // Guardar usuario
@@ -99,12 +124,16 @@ public class AuthController {
                     usuarioGuardado.getEmail(),
                     usuarioGuardado.getNombre(),
                     usuarioGuardado.getApellido(),
-                    usuarioGuardado.getRoles().stream().map(Rol::getNombre).toList(),
+                    usuarioGuardado.getRoles() != null ? 
+                        usuarioGuardado.getRoles().stream().map(Rol::getNombre).toList() : 
+                        List.of(),
                     usuarioGuardado.getActivo()
             );
 
+            logger.info("Usuario registrado exitosamente: {}", usuarioGuardado.getUser());
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (Exception e) {
+            logger.error("Error al registrar usuario: {}", request.user(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -119,39 +148,27 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
         try {
-            System.out.println("Intentando login para usuario: " + request.user());
-            
-            // Buscar usuario en la base de datos primero
-            List<Usuario> usuarios = usuarioRepository.findAll();
-            Optional<Usuario> usuario = usuarios.stream()
-                    .filter(u -> u.getUser().equals(request.user()))
-                    .findFirst();
+            // Buscar usuario en la base de datos
+            Optional<Usuario> usuario = usuarioRepository.findByUser(request.user());
 
             if (usuario.isEmpty()) {
-                System.out.println("Usuario no encontrado: " + request.user());
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
 
             Usuario usuarioEncontrado = usuario.get();
-            System.out.println("Usuario encontrado: " + usuarioEncontrado.getUser() + ", Activo: " + usuarioEncontrado.getActivo());
 
             // Verificar si el usuario está activo
             if (!usuarioEncontrado.getActivo()) {
-                System.out.println("Usuario inactivo: " + request.user());
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
 
-            // Verificar contraseña manualmente
+            // Verificar contraseña
             if (!passwordEncoder.matches(request.password(), usuarioEncontrado.getPassword())) {
-                System.out.println("Contraseña incorrecta para usuario: " + request.user());
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
-
-            System.out.println("Autenticación exitosa para usuario: " + request.user());
 
             // Generar token
             String token = tokenGenerate.generarToken(usuarioEncontrado);
-            System.out.println("Token generado exitosamente");
 
             // Crear respuesta
             AuthResponse response = new AuthResponse(
@@ -160,14 +177,15 @@ public class AuthController {
                     usuarioEncontrado.getEmail(),
                     usuarioEncontrado.getNombre(),
                     usuarioEncontrado.getApellido(),
-                    usuarioEncontrado.getRoles().stream().map(Rol::getNombre).toList(),
+                    usuarioEncontrado.getRoles() != null ? 
+                        usuarioEncontrado.getRoles().stream().map(Rol::getNombre).toList() : 
+                        List.of(),
                     usuarioEncontrado.getActivo()
             );
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            System.err.println("Error en login: " + e.getMessage());
-            e.printStackTrace();
+            e.printStackTrace(); // Para debugging
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -179,10 +197,7 @@ public class AuthController {
             String username = tokenGenerate.getSujet(token);
             
             // Buscar usuario
-            List<Usuario> usuarios = usuarioRepository.findAll();
-            Optional<Usuario> usuario = usuarios.stream()
-                    .filter(u -> u.getUser().equals(username))
-                    .findFirst();
+            Optional<Usuario> usuario = usuarioRepository.findByUser(username);
 
             if (usuario.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -202,12 +217,15 @@ public class AuthController {
                     usuarioEncontrado.getEmail(),
                     usuarioEncontrado.getNombre(),
                     usuarioEncontrado.getApellido(),
-                    usuarioEncontrado.getRoles().stream().map(Rol::getNombre).toList(),
+                    usuarioEncontrado.getRoles() != null ? 
+                        usuarioEncontrado.getRoles().stream().map(Rol::getNombre).toList() : 
+                        List.of(),
                     usuarioEncontrado.getActivo()
             );
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            e.printStackTrace(); // Para debugging
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
     }
@@ -220,32 +238,4 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
-    // GET - Diagnóstico del sistema de autenticación
-    @GetMapping("/debug")
-    public ResponseEntity<String> debugAuth() {
-        try {
-            List<Usuario> usuarios = usuarioRepository.findAll();
-            StringBuilder debug = new StringBuilder();
-            debug.append("=== DIAGNÓSTICO DE AUTENTICACIÓN ===\n");
-            debug.append("Total usuarios: ").append(usuarios.size()).append("\n");
-            
-            for (Usuario usuario : usuarios) {
-                debug.append("Usuario: ").append(usuario.getUser())
-                     .append(", Email: ").append(usuario.getEmail())
-                     .append(", Activo: ").append(usuario.getActivo())
-                     .append(", Roles: ").append(usuario.getRoles().size())
-                     .append("\n");
-            }
-            
-            debug.append("\n=== CONFIGURACIÓN ===\n");
-            debug.append("PasswordEncoder: ").append(passwordEncoder != null ? "OK" : "NULL").append("\n");
-            debug.append("TokenGenerate: ").append(tokenGenerate != null ? "OK" : "NULL").append("\n");
-            debug.append("UsuarioRepository: ").append(usuarioRepository != null ? "OK" : "NULL").append("\n");
-            
-            return ResponseEntity.ok(debug.toString());
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error en diagnóstico: " + e.getMessage());
-        }
-    }
 }

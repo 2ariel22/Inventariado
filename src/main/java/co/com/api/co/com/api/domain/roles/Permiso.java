@@ -2,6 +2,7 @@ package co.com.api.co.com.api.domain.roles;
 
 import jakarta.persistence.*;
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "permisos")
@@ -24,6 +25,7 @@ public class Permiso {
     private Accion accion;
     
     @ManyToMany(mappedBy = "permisos")
+    @JsonIgnore
     private List<Rol> roles;
     
     // Enum para acciones
